@@ -1,5 +1,6 @@
 
 # Function Import 
+from re import X
 from src.data_loader import * 
 from src.genetic_algo_class import * 
 

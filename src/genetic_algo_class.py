@@ -1,3 +1,4 @@
+import sre_compile
 import numpy as np
 import pandas as pd
 import random
@@ -31,9 +32,7 @@ class genetic_algorithm():
         self.elite_rate = elite_rate
         self.port_risk = self.find_series_sd()
         self.port_return = self.find_series_mean()
-        #self.weights = 0 
-        #self.optimal_weight = 0 
-        #self.sharpe = 0 
+        self.port_cov = self.find_series_cov_matrix() 
 
 
     def optimise_weights(self) -> None:
@@ -45,19 +44,12 @@ class genetic_algorithm():
         for i in range(0, self.generations):
             
             self.fitness_func()
-            
-            elites, parents = self.elitism()
-            
-            parents, no_cross_parents = self.selection(parents)
-
-            children = self.crossover(parents)
-
-            children = self.mutation(children) 
-
-            self.next_gen(elites, children, no_cross_parents)
-            
-            avg_res = self.avg_gen_result()
-            print('Generation', i, ': Average Sharpe Ratio of', avg_res, 'from', len(self.weights), 'chromosomes')
+            self.elitism()
+            self.selection()
+            self.crossover()
+            self.mutation() 
+            self.avg_gen_result()
+            print('Generation', i, ': Average Sharpe Ratio of', self.avg_sharpe, 'from', len(self.weights), 'chromosomes')
             
         self.optimal_solution()
 
@@ -65,165 +57,102 @@ class genetic_algorithm():
     def generate_weights(self) -> None:
         """
         Generate random weights for each ticker.
-        """
-        weight_array = np.empty((self.population, (self.n_assets + 2)))
-        weights = []
-        
-        for i in range(0, self.population):
-            weighting = np.random.random(self.n_assets)
-            weighting /= np.sum(weighting)
-            weights.append(weighting)
-        weights = np.array(weights)
-        
-        for i in range(0, self.n_assets):
-            weight_array[:, i] = weights[:, i]
-        
-        self.weights = weight_array
+        """        
+        self.weights = np.random.random(size = (self.population, self.n_assets))
 
 
     def fitness_func(self) -> None:
         """
         Evaluate weights by fitness function.
         """ 
-        fitness = []
-        
-        for i in range(0, len(self.weights)):
-            w_return = (self.weights[i, 0:self.n_assets] * self.port_return) 
-            w_risk = np.sqrt(np.dot(self.weights[i, 0:self.n_assets].T, np.dot(self.port_risk, self.weights[i, 0:self.n_assets]))) * np.sqrt(252)
-            score = ((np.sum(w_return) * 100) - self.rf) / (np.sum(w_risk) * 100)
-            fitness.append(score)
-            
-        fitness = np.array(fitness).reshape(len(self.weights))
-        self.weights[:, self.n_assets] = fitness
+        self.exp_ret = np.sum((self.weights * self.port_return), axis = 1) - self.rf
+        self.sd = np.sum((self.weights * self.port_risk), axis = 1)
+        self.sharpe = self.exp_ret / self.sd
 
 
-    def elitism(self):
+    def elitism(self) -> None:   
         """
-        Perform elitism step.
-
-        Returns
-        ----------
-        elite_results : array of population selected as elites
-        non_elite_results : array of population not selected as elites
+        Perform elitism step by finding n highest sharpe ratios.
         """ 
-        sorted_ff = self.weights[self.weights[:, self.n_assets].argsort()]
-        elite_w = int(len(sorted_ff) * self.elite_rate)
-        elite_results = sorted_ff[-elite_w:]
-        non_elite_results = sorted_ff[:-elite_w] 
-        
-        return elite_results, non_elite_results
+        n_elite = int(len(self.sharpe) * self.elite_rate)
+        self.elite_index = (-self.sharpe).argsort()[:n_elite]
+        self.non_elite_index = np.setdiff1d(range(len(self.sharpe)), self.elite_index).tolist()
 
 
-    def selection(self, parents: np.array):
+    def selection(self) -> None:   
         """
-        Perform selection step.
-
-        Parameters 
-        ----------
-        parents : array of population eligible for selection
-
-        Returns
-        ----------
-        crossover_gen : array of population after selection now for crossover
-        non_crossover_gen : array of population after selection not for crossover
+        Perform selection step by selecting population for crossover and not crossover.
         """ 
-        sol_len = int(len(parents) / 2)
-        if (sol_len % 2) != 0: sol_len = sol_len + 1
-        crossover_gen = np.empty((0, (self.n_assets + 2)))  
-        
-        for i in range(0, sol_len):
-            parents[:, (self.n_assets + 1)] = np.cumsum(parents[:, self.n_assets]).reshape(len(parents))
-            rand = random.randint(0, int(sum(parents[:, self.n_assets])))
-            
-            for i in range(0, len(parents)): nearest_val = min(parents[i:, (self.n_assets + 1)], key = lambda x: abs(x - rand))
-            val = np.where(parents == nearest_val)
-            index = val[0][0]
-            
-            next_gen = parents[index].reshape(1, (self.n_assets + 2))
-            
-            crossover_gen = np.append(crossover_gen, next_gen, axis = 0) 
-            parents = np.delete(parents, (val[0]), 0)
-            
-        non_crossover_gen = crossover_gen.copy()
-        
-        return crossover_gen, non_crossover_gen
+        non_elite_sharpes = self.sharpe[self.non_elite_index]
+        n_selections = int(len(non_elite_sharpes) / 2)
+        self.crossover_index = np.array([])
+
+        self.acc_sharpes = self.normalise(arr = np.cumsum(non_elite_sharpes), cumulative = True) 
+
+        for _ in range(n_selections):
+            rw_prob = random.random()
+            index = (np.abs(self.acc_sharpes - rw_prob)).argmin()
+            self.crossover_index = np.append(self.crossover_index, index)
+
+        self.non_crossover_index = np.setdiff1d(self.non_elite_index, self.crossover_index).tolist()
 
 
-    def crossover(self, weights: np.array) -> np.array:   
+    def crossover(self) -> None:   
         """
-        Perform crossover step.
-
-        Parameters 
-        ----------
-        weights : array of population to be crossed
-
-        Returns
-        ----------
-        weights : array of population after crossover
+        Perform crossover step with selected parents.
         """
-        for i in range(0, int((len(weights))/2), 2): 
-            gen1, gen2 = weights[i], weights[i+1]
-            gen1, gen2 = self.uni_co(gen1, gen2)
-            weights[i], weights[i+1] = gen1, gen2
+        for i in range(int((len(self.crossover_index))/2), 2): 
+            gen1, gen2 = self.crossover_index[i], self.crossover_index[i+1]
+            gen1_weights, gen2_weights = self.uni_co(gen1, gen2)
             
-        weights = self.normalise(weights)
-        
-        return weights
+            self.weights[gen1] = self.normalise(gen1_weights)
+            self.weights[gen2] = self.normalise(gen2_weights)
+
         
 
-    def uni_co(self, gen1: np.array, gen2: np.array):
+    def uni_co(self, gen1: np.array, gen2: np.array) -> np.array:
         """
         Perform uniform crossover step.
 
         Parameters 
         ----------
-        gen1 : first array of population to be crossovered
-        gen2 : second array of population to be crossovered
+        gen1 : first index of population to be crossovered
+        gen2 : second index of population to be crossovered
 
         Returns
         ----------
-        gen1 : first array of population after crossover
-        gen2 : second array of population after crossover
+        w_one : first array of population after crossover
+        w_two : second array of population after crossover
         """
+        w_one = self.weights[gen1]
+        w_two = self.weights[gen2]
+
         prob = np.random.normal(1, 1, self.n_assets)
         
         for i in range(0, len(prob)):
             if prob[i] > self.crossover_rate:
-                gen1[i], gen2[i] = gen2[i], gen1[i]  
+                w_one[i], w_two[i] = w_two[i], w_one[i]  
                 
-        return gen1, gen2
+        return w_one, w_two
 
 
-    def mutation(self, generation: np.array) -> np.array: 
+    def mutation(self) -> None: 
         """
         Perform mutation step.
-
-        Parameters 
-        ----------
-        generation : array of population to be mutated
-
-        Returns
-        ----------
-        generation : mutated population
         """
-
-        weight_n = len(generation) * ((np.shape(generation)[1]) - 2)
+        weight_n = len(self.crossover_index) * self.n_assets
         mutate_gens = int(weight_n * self.mutation_rate)
         
-        if (mutate_gens < 1):
-            return generation
-        
-        else:
-            for _ in range(0, mutate_gens):
-
-                rand_pos_x, rand_pos_y = random.randint(0, (len(generation) - 1)), random.randint(0, (self.n_assets - 1))
-                mu_gen = generation[rand_pos_x][rand_pos_y]
+        if self.mutation_rate != 0:
+            for _ in range(mutate_gens):
+                rand_index = int(np.random.choice(self.crossover_index))
+                generation = self.weights[rand_index]
+                rand_asset = random.randint(0, (self.n_assets - 1))
+                mu_gen = generation[rand_asset]
                 mutated_ind = mu_gen * np.random.normal(0,1)
-                generation[rand_pos_x][rand_pos_y] = abs(mutated_ind)
-                generation = self.normalise(generation)
-
-            return generation
-            
+                generation[rand_asset] = abs(mutated_ind)
+                generation = self.normalise(arr = generation, cumulative = False)
+                self.weights[rand_index] = generation
 
 
     def find_series_mean(self) -> np.array:
@@ -235,7 +164,7 @@ class genetic_algorithm():
         port_return : array of ticker mean return 
         """
         returns = np.log(self.data / self.data.shift(1))
-        port_return = np.array(returns.mean() * 252)
+        port_return = np.array(returns.mean() * 252) * 100
         return port_return 
 
 
@@ -247,77 +176,71 @@ class genetic_algorithm():
         ----------
         port_risk : array of ticker standard deviations
         """
-        returns = np.log(self.data / self.data.shift(1))
-        port_risk = returns.cov()
-        return port_risk
+        return np.array(np.std(self.data, axis = 0))
 
-
-    def normalise(self, weights: np.array) -> np.array:
+    
+    def find_series_cov_matrix(self) -> np.array:
         """
-        Normalise array.
-
-        Parameters 
-        ----------
-        weights : array passed to be normalised
+        Compute covariance matrix from each ticket.
 
         Returns
         ----------
-        weights : normalised array
+        port_cov : matrix of standard deviations 
         """
-        for i in range(0, len(weights)):
-            weights[i][0:self.n_assets] /= np.sum(weights[i][0:self.n_assets])
-        return weights 
+        returns = np.log(self.data / self.data.shift(1))
+        port_cov = returns.cov()
+        return port_cov
+
+
+    def normalise(self, arr: np.array, type: str) -> np.array:
+        """
+        Normalise an array.
+
+        Parameters 
+        ----------
+        arr : array passed to be normalised
+        type : on what axis 
+
+        Returns
+        ----------
+        normal_arr : normalised array
+        """
+        if type == "cumsum":
+            return arr / arr[len(arr) - 1]
+        elif type == "row":
+            return arr / arr[len(arr) - 1]
+        elif type == "array":
+            return arr / np.sum(arr)
         
-
-
-    def next_gen(self, elites: np.array, children: np.array, no_cross_parents: np.array) -> None:
-        """
-        Stack all selected populations to create next generate population
-
-        Parameters
-        ---------- 
-        elites : array of population with elites
-        children : array of population with crossover children
-        no_cross_parents : array of population with no crossover
-        """
-        self.weights = np.vstack((elites, children, no_cross_parents))
-
 
     def optimal_solution(self) -> None:
         """
         Find the optimal solution.
         """
-        optimal_weights = self.weights[self.weights[:, (self.n_assets + 1)].argsort()]
-        self.optimal_weight = optimal_weights[:, 0:self.n_assets][0]
-        self.sharpe = optimal_weights[:, (self.n_assets)][0]
+        optimal_index = np.argmax(self.sharpe)
+        self.optimal_weight = self.weights[optimal_index]
+        self.optimal_sharpe = self.sharpe[optimal_index]
 
 
     def avg_gen_result(self) -> float:
         """
         Compute average result from current population weights.
 
-        Returns
-        ----------
-        average : average result 
         """
-        return round(np.mean(self.weights[:, self.n_assets]), 2)
+        self.avg_sharpe = round(np.mean(self.sharpe), 2)
 
 
     def plot_efficient_frontier(self):
         """
         Plot the efficient frontier. 
-
-        Returns
-        ----------
-        average : average result 
         """
-        risk = np.mean(np.sqrt(np.dot(self.weights[:, 0:self.n_assets], np.dot(self.port_risk, self.weights[:, 0:self.n_assets].T))) * np.sqrt(252), axis = 0)
-        ret = np.mean(self.weights[:, 0:self.n_assets] * self.port_return, axis = 1)
+        risk = np.mean(np.sqrt(np.dot(self.weights[:, 0:self.n_assets], np.dot(self.port_risk, self.weights[:, 0:self.n_assets].T))) * np.sqrt(252), axis = 1)
+        ret = np.sum(self.weights * self.port_return, axis = 1)
         sharpe = self.weights[:, self.n_assets]
 
         cm = plt.cm.get_cmap('RdYlBu')
 
-        fig = plt.scatter(risk, ret, c = sharpe, cmap = cm)
+        fig = plt.scatter(risk, ret, c = self.sharpe, cmap = cm)
         plt.colorbar(fig)
         plt.xlabel("Standard Deviation")
         plt.ylabel("Return")
