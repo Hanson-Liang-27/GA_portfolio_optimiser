@@ -1,7 +1,7 @@
 
 # Function Import 
-from data_loader import * 
-from genetic_algo_class import * 
+from src.data_loader import * 
+from src.genetic_algo_class import * 
 
 # Config
 tickers = ['AAPL', 'TSLA', 'MSFT']
