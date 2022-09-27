@@ -45,7 +45,7 @@ class genetic_algorithm():
             self.elitism()
             self.selection()
             self.crossover()
-            self.mutation() 
+            self.mutation()
             self.avg_gen_result()
             print('Generation', i, ': Average Sharpe Ratio of', self.avg_sharpe, 'from', len(self.weights), 'chromosomes')
         
@@ -76,8 +76,8 @@ class genetic_algorithm():
         Perform elitism step by finding n highest sharpe ratios.
         """ 
         n_elite = int(len(self.sharpe) * self.elite_rate)
-        self.elite_index = (-self.sharpe).argsort()[:n_elite]
-        self.non_elite_index = np.setdiff1d(range(len(self.sharpe)), self.elite_index).tolist()
+        elite_index = (-self.sharpe).argsort()[:n_elite]
+        self.non_elite_index = np.setdiff1d(range(len(self.sharpe)), elite_index).tolist()
 
 
     def selection(self) -> None:   
@@ -95,22 +95,18 @@ class genetic_algorithm():
             index = (np.abs(self.acc_sharpes - rw_prob)).argmin()
             self.crossover_index = np.append(self.crossover_index, index)
 
-        self.non_crossover_index = np.setdiff1d(self.non_elite_index, self.crossover_index).tolist()
-
 
     def crossover(self) -> None:   
         """
         Perform crossover step with selected parents.
         """
-        for i in range(int((len(self.crossover_index))/2), 2): 
+        for i in range(0, int(len(self.crossover_index)/2), 2): 
             gen1, gen2 = self.crossover_index[i], self.crossover_index[i+1]
             gen1_weights, gen2_weights = self.uni_co(gen1, gen2)
-            
-            self.weights[gen1] = self.normalise(gen1_weights, type = "row")
-            self.weights[gen2] = self.normalise(gen2_weights, type = "row")
+            self.weights[int(gen1)] = self.normalise(gen1_weights, type = "array")
+            self.weights[int(gen2)] = self.normalise(gen2_weights, type = "array")
 
         
-
     def uni_co(self, gen1: np.array, gen2: np.array) -> np.array:
         """
         Perform uniform crossover step.
@@ -125,11 +121,11 @@ class genetic_algorithm():
         w_one : first array of population after crossover
         w_two : second array of population after crossover
         """
-        w_one = self.weights[gen1]
-        w_two = self.weights[gen2]
+        w_one = self.weights[int(gen1)]
+        w_two = self.weights[int(gen2)]
 
         prob = np.random.normal(1, 1, self.n_assets)
-        
+
         for i in range(0, len(prob)):
             if prob[i] > self.crossover_rate:
                 w_one[i], w_two[i] = w_two[i], w_one[i]  
@@ -231,7 +227,7 @@ class genetic_algorithm():
         self.avg_sharpe = round(np.mean(self.sharpe), 2)
 
 
-    def plot_efficient_frontier(self):
+    def plot_efficient_frontier(self) -> None:
         """
         Plot the efficient frontier. 
         """

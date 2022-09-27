@@ -5,9 +5,9 @@ from src.genetic_algo_class import *
 
 # Config
 tickers = ['AAPL', 'TSLA', 'MSFT']
-population = 150
+population = 500
 risk_free_rate = 0.02
-generations = 40
+generations = 50
 crossover_rate = 0.4
 mutation_rate = 0.01
 elite_rate = 0.25
