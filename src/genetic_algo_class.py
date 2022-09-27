@@ -48,7 +48,8 @@ class genetic_algorithm():
             self.mutation() 
             self.avg_gen_result()
             print('Generation', i, ': Average Sharpe Ratio of', self.avg_sharpe, 'from', len(self.weights), 'chromosomes')
-            
+        
+        self.fitness_func()
         self.optimal_solution()
 
 
@@ -64,7 +65,9 @@ class genetic_algorithm():
         Evaluate weights by fitness function.
         """ 
         self.exp_ret = np.sum((self.weights * self.port_return), axis = 1) - self.rf
-        self.sd = np.sqrt(np.sum((self.weights * self.port_risk), axis = 1))
+        self.sd = np.zeros(len(self.weights))
+        for i in range(len(self.weights)): 
+            self.sd[i] = np.sqrt(np.transpose(self.weights[i]) @ self.port_cov @ self.weights[i])
         self.sharpe = self.exp_ret / self.sd
 
 
@@ -232,13 +235,9 @@ class genetic_algorithm():
         """
         Plot the efficient frontier. 
         """
-        risk = np.mean(np.sqrt(np.dot(self.weights[:, 0:self.n_assets], np.dot(self.port_risk, self.weights[:, 0:self.n_assets].T))) * np.sqrt(252), axis = 1)
-        ret = np.sum(self.weights * self.port_return, axis = 1)
-        sharpe = 0
-
         cm = plt.cm.get_cmap('RdYlBu')
 
-        fig = plt.scatter(risk, ret, c = self.sharpe, cmap = cm)
+        fig = plt.scatter(self.exp_ret, self.sd, c = self.sharpe, cmap = cm)
         plt.colorbar(fig)
         plt.xlabel("Standard Deviation")
         plt.ylabel("Return")
