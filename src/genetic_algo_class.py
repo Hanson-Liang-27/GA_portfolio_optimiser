@@ -1,4 +1,4 @@
-import sre_compile
+
 import numpy as np
 import pandas as pd
 import random
@@ -21,7 +21,6 @@ class genetic_algorithm():
         """
         Initialise the class with data and parameters.
         """
-
         self.data = data
         self.n_assets = len(self.data.columns)
         self.rf = risk_free_rate
@@ -42,7 +41,6 @@ class genetic_algorithm():
         self.generate_weights()
         
         for i in range(0, self.generations):
-            
             self.fitness_func()
             self.elitism()
             self.selection()
@@ -58,7 +56,7 @@ class genetic_algorithm():
         """
         Generate random weights for each ticker.
         """        
-        self.weights = np.random.random(size = (self.population, self.n_assets))
+        self.weights = self.normalise(arr = np.random.random(size = (self.population, self.n_assets)), type = "row")
 
 
     def fitness_func(self) -> None:
@@ -66,7 +64,7 @@ class genetic_algorithm():
         Evaluate weights by fitness function.
         """ 
         self.exp_ret = np.sum((self.weights * self.port_return), axis = 1) - self.rf
-        self.sd = np.sum((self.weights * self.port_risk), axis = 1)
+        self.sd = np.sqrt(np.sum((self.weights * self.port_risk), axis = 1))
         self.sharpe = self.exp_ret / self.sd
 
 
@@ -87,7 +85,7 @@ class genetic_algorithm():
         n_selections = int(len(non_elite_sharpes) / 2)
         self.crossover_index = np.array([])
 
-        self.acc_sharpes = self.normalise(arr = np.cumsum(non_elite_sharpes), cumulative = True) 
+        self.acc_sharpes = self.normalise(arr = np.cumsum(non_elite_sharpes), type = "cumsum") 
 
         for _ in range(n_selections):
             rw_prob = random.random()
@@ -105,8 +103,8 @@ class genetic_algorithm():
             gen1, gen2 = self.crossover_index[i], self.crossover_index[i+1]
             gen1_weights, gen2_weights = self.uni_co(gen1, gen2)
             
-            self.weights[gen1] = self.normalise(gen1_weights)
-            self.weights[gen2] = self.normalise(gen2_weights)
+            self.weights[gen1] = self.normalise(gen1_weights, type = "row")
+            self.weights[gen2] = self.normalise(gen2_weights, type = "row")
 
         
 
@@ -151,7 +149,7 @@ class genetic_algorithm():
                 mu_gen = generation[rand_asset]
                 mutated_ind = mu_gen * np.random.normal(0,1)
                 generation[rand_asset] = abs(mutated_ind)
-                generation = self.normalise(arr = generation, cumulative = False)
+                generation = self.normalise(arr = generation, type = "array")
                 self.weights[rand_index] = generation
 
 
@@ -164,7 +162,7 @@ class genetic_algorithm():
         port_return : array of ticker mean return 
         """
         returns = np.log(self.data / self.data.shift(1))
-        port_return = np.array(returns.mean() * 252) * 100
+        port_return = np.array(returns.mean() * 252)
         return port_return 
 
 
@@ -208,7 +206,7 @@ class genetic_algorithm():
         if type == "cumsum":
             return arr / arr[len(arr) - 1]
         elif type == "row":
-            return arr / arr[len(arr) - 1]
+            return arr / np.sum(arr, axis = 1)[:, np.newaxis]
         elif type == "array":
             return arr / np.sum(arr)
         
@@ -236,7 +234,7 @@ class genetic_algorithm():
         """
         risk = np.mean(np.sqrt(np.dot(self.weights[:, 0:self.n_assets], np.dot(self.port_risk, self.weights[:, 0:self.n_assets].T))) * np.sqrt(252), axis = 1)
         ret = np.sum(self.weights * self.port_return, axis = 1)
-        sharpe = self.weights[:, self.n_assets]
+        sharpe = 0
 
         cm = plt.cm.get_cmap('RdYlBu')
 

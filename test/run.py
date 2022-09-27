@@ -1,13 +1,12 @@
 
 # Function Import 
-from re import X
 from src.data_loader import * 
 from src.genetic_algo_class import * 
 
 # Config
 tickers = ['AAPL', 'TSLA', 'MSFT']
 population = 150
-risk_free_rate = 2
+risk_free_rate = 0.02
 generations = 40
 crossover_rate = 0.4
 mutation_rate = 0.01
