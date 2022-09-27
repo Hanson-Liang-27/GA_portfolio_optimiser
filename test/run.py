@@ -36,3 +36,6 @@ ga.optimise_weights()
 
 # View Optimal Weights
 ga.optimal_weight
+
+# Plot Efficient Frontier
+ga.plot_efficient_frontier()

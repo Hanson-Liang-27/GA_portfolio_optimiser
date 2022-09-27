@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import random
+import matplotlib.pyplot as plt
 
 class genetic_algorithm():
     """
@@ -30,10 +31,9 @@ class genetic_algorithm():
         self.elite_rate = elite_rate
         self.port_risk = self.find_series_sd()
         self.port_return = self.find_series_mean()
-        self.weights = 0 
-        self.optimal_weight = 0 
-        self.estimated_return = 0 
-        self.estimated_risk = 0 
+        #self.weights = 0 
+        #self.optimal_weight = 0 
+        #self.sharpe = 0 
 
 
     def optimise_weights(self) -> None:
@@ -97,7 +97,7 @@ class genetic_algorithm():
         self.weights[:, self.n_assets] = fitness
 
 
-    def elitism(self) -> tuple(np.array, np.array):
+    def elitism(self):
         """
         Perform elitism step.
 
@@ -114,7 +114,7 @@ class genetic_algorithm():
         return elite_results, non_elite_results
 
 
-    def selection(self, parents: np.array) -> tuple(np.array, np.array):
+    def selection(self, parents: np.array):
         """
         Perform selection step.
 
@@ -171,7 +171,7 @@ class genetic_algorithm():
         return weights
         
 
-    def uni_co(self, gen1: np.array, gen2: np.array) -> tuple(np.array, np.array):
+    def uni_co(self, gen1: np.array, gen2: np.array):
         """
         Perform uniform crossover step.
 
@@ -289,8 +289,7 @@ class genetic_algorithm():
         """
         optimal_weights = self.weights[self.weights[:, (self.n_assets + 1)].argsort()]
         self.optimal_weight = optimal_weights[:, 0:self.n_assets][0]
-        self.estimated_return = optimal_weights[:, (self.n_assets)][0]
-        self.estimated_risk = optimal_weights[:, (self.n_assets + 1)][0]
+        self.sharpe = optimal_weights[:, (self.n_assets)][0]
 
 
     def avg_gen_result(self) -> float:
@@ -302,4 +301,26 @@ class genetic_algorithm():
         average : average result 
         """
         return round(np.mean(self.weights[:, self.n_assets]), 2)
+
+
+    def plot_efficient_frontier(self):
+        """
+        Plot the efficient frontier. 
+
+        Returns
+        ----------
+        average : average result 
+        """
+        risk = np.mean(np.sqrt(np.dot(self.weights[:, 0:self.n_assets], np.dot(self.port_risk, self.weights[:, 0:self.n_assets].T))) * np.sqrt(252), axis = 0)
+        ret = np.mean(self.weights[:, 0:self.n_assets] * self.port_return, axis = 1)
+        sharpe = self.weights[:, self.n_assets]
+
+        cm = plt.cm.get_cmap('RdYlBu')
+
+        fig = plt.scatter(risk, ret, c = sharpe, cmap = cm)
+        plt.colorbar(fig)
+        plt.xlabel("Standard Deviation")
+        plt.ylabel("Return")
+        plt.title("Efficient Frontier")
+        plt.show()
 
