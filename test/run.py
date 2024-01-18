@@ -3,6 +3,8 @@
 from src.data_loader import * 
 from src.genetic_algo_class import * 
 
+# test_for_git_command
+
 # Config
 tickers = ['AAPL', 'TSLA', 'MSFT']
 population = 500
